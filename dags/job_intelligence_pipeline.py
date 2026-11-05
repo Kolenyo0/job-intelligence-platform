@@ -3,6 +3,7 @@
 import os
 import subprocess
 import sys
+import logging
 from datetime import datetime, timedelta
 
 from airflow import DAG
@@ -15,11 +16,26 @@ PROJECT_DIR = "/opt/airflow/project"
 def _run_command(command: list[str], task_name:str) -> None:
     env = os.environ.copy()
     env["PYTHONPATH"] = "/opt/airflow/project/src"
-    subprocess.run(command, cwd=PROJECT_DIR, env=env, check=True)
+    with subprocess.Popen(
+    command,
+    cwd=PROJECT_DIR,
+    env=env,
+    stdout=subprocess.PIPE,
+    stderr=subprocess.STDOUT,
+    text=True,
+    bufsize=1,
+    ) as process:
+        for line in process.stdout:
+            logging.info("%s", line.rstrip())
+
+        return_code = process.wait()
+
+    if return_code != 0:
+        raise subprocess.CalledProcessError(return_code, command)
 
 
 def run_ingestion(**context: object) -> None:
-    _run_command([sys.executable, "src/pipeline.py"], "ingestion")
+    _run_command([sys.executable, "-u", "src/pipeline.py"], "ingestion")
 
 
 def run_dbt_build() -> None:
