@@ -39,7 +39,7 @@ def run_ingestion(**context: object) -> None:
 
 
 def run_dbt_build() -> None:
-    _run_command([sys.executable, "scripts/run_dbt.py", "build"], "dbt build")
+    _run_command([sys.executable, "-u", "scripts/run_dbt.py", "build"], "dbt build")
 
 
 with DAG(

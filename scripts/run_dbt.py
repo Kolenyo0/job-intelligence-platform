@@ -67,6 +67,9 @@ def main() -> int:
             temp_dir,
         ]
         result = dbtRunner().invoke(command)
+        if result.exception is not None:
+            raise result.exception
+
         return 0 if result.success else 1
 
 
