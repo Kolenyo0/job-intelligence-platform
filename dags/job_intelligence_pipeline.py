@@ -12,7 +12,7 @@ from airflow.operators.python import PythonOperator
 PROJECT_DIR = "/opt/airflow/project"
 
 
-def _run_command(command: list[str], task_name) -> None:
+def _run_command(command: list[str], task_name:str) -> None:
     env = os.environ.copy()
     env["PYTHONPATH"] = "/opt/airflow/project/src"
     subprocess.run(command, cwd=PROJECT_DIR, env=env, check=True)
