@@ -1,0 +1,104 @@
+version: 2
+
+models:
+  - name: int_job_postings
+    description: >
+      Latest staged record for each source and source_id pair. Grain:
+      one row per (source, source_id).
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - source
+              - source_id
+    columns:
+      - name: source
+        tests:
+          - not_null
+      - name: source_id
+        tests:
+          - not_null
+
+  - name: dim_company
+    description: >
+      One row per normalized company name, with null or blank names grouped
+      into an Unknown entity.
+    columns:
+      - name: company_key
+        description: Stable MD5 surrogate key derived from the normalized company name.
+        tests:
+          - not_null
+          - unique
+      - name: company_name
+        tests:
+          - not_null
+
+  - name: dim_role
+    description: >
+      One row per normalized job title, with null or blank titles grouped
+      into an Unknown entity.
+    columns:
+      - name: role_key
+        description: Stable MD5 surrogate key derived from the normalized job title.
+        tests:
+          - not_null
+          - unique
+      - name: job_title
+        tests:
+          - not_null
+
+  - name: dim_location
+    description: >
+      One row per normalized location, with null or blank locations grouped
+      into an Unknown entity.
+    columns:
+      - name: location_key
+        description: Stable MD5 surrogate key derived from the normalized location.
+        tests:
+          - not_null
+          - unique
+      - name: location_name
+        tests:
+          - not_null
+
+  - name: fact_job_posting
+    description: >
+      Job posting events joined to company, role, and location dimensions.
+      Grain: one row per (source, source_id).
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - source
+              - source_id
+    columns:
+      - name: source
+        tests:
+          - not_null
+      - name: source_id
+        tests:
+          - not_null
+      - name: company_key
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_company')
+                field: company_key
+      - name: role_key
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_role')
+                field: role_key
+      - name: location_key
+        tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('dim_location')
+                field: location_key
+      - name: remote
+        tests:
+          - not_null

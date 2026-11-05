@@ -1,0 +1,26 @@
+version: 2
+
+models:
+  - name: stg_job_postings
+    description: >
+      Cleaned staging view of ingested job postings. Grain: one row per
+      (source, source_id).
+    data_tests:
+      - dbt_utils.unique_combination_of_columns:
+          arguments:
+            combination_of_columns:
+              - source
+              - source_id
+    columns:
+      - name: source
+        tests:
+          - not_null
+      - name: source_id
+        tests:
+          - not_null
+      - name: job_title
+        tests:
+          - not_null
+      - name: remote
+        tests:
+          - not_null

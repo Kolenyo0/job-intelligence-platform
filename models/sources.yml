@@ -1,0 +1,15 @@
+version: 2
+
+sources:
+  - name: ingestion
+    schema: public
+    tables:
+     - name: job_postings
+       columns:
+          - name: source
+            tests:
+              - not_null
+          - name: source_id
+            tests:
+              - not_null
+              
