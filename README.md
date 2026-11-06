@@ -132,6 +132,9 @@ Example Airflow tunnel, with placeholders for your own SSH key and host:
 ssh -i /path/to/key.pem -L 18080:127.0.0.1:8080 ubuntu@EC2_HOST
 Then open http://localhost:18080. Keep .env, private keys, raw data, and generated runtime files out of version control.
 
+See the [Airflow Linux deployment runbook](docs/airflow-linux-deployment-runbook.md)
+for EC2 setup, permissions, SSH tunnels, troubleshooting, and recovery.
+
 **Power BI**
 
 The executive dashboard uses curated fact and dimension models for analysis by company, location, role, and remote status. Refresh an imported Power BI dataset after the pipeline succeeds to retrieve updated data.
