@@ -5,3 +5,8 @@ __pycache__/
 dbt_packages/
 target/
 logs/
+# Runtime state belongs to each deployment
+/data/watermark.json
+
+# Raw snapshots are stored outside Git
+/data/raw/*.json
