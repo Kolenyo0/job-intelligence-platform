@@ -10,6 +10,12 @@ Job postings arrive as operational API records. Analyzing them consistently requ
 
 This project implements that workflow and the operational controls needed to maintain it: incremental ingestion, safe reruns, raw snapshots, data-quality tests, execution logs, and recovery through snapshot replay.
 
+**Raw snapshot storage**
+
+Local development uses `RAW_STORAGE=local` by default and needs no AWS credentials. Snapshots are written to `data/raw/`. To use durable S3 snapshots, set `RAW_STORAGE=s3`, `S3_BUCKET`, `S3_PREFIX` (default `raw/`), and `AWS_DEFAULT_REGION`. The application writes the complete JSON file locally, closes it, uploads it with `Content-Type: application/json`, records the resulting `s3://bucket/key` in `pipeline_runs.snapshot_location`, and removes the local copy only after a successful upload. An upload failure leaves the local file in place, fails the task, and prevents watermark advancement.
+
+Replay accepts either a local JSON path or `s3://bucket/key`. S3 replay downloads to a temporary file, uses the same validation and UPSERT path, then removes the temporary file; it never deletes the S3 object. Replay does not read or update the ingestion watermark, preserving the existing recovery behavior.
+
 **Architecture**
 
 <img width="1736" height="1696" alt="mermaid-diagram" src="https://github.com/user-attachments/assets/bc2447c5-cd64-4930-ac31-209e03bdb433" />

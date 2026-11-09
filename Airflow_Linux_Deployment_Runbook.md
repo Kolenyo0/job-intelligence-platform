@@ -234,7 +234,83 @@ The `.env` group-read setting is needed by this whole-project mount because the 
 
 Airflow's own `/opt/airflow/logs` named volume is separate from project `logs/`. Do not change PostgreSQL volume ownership to the Airflow UID.
 
-## 8. Start services and install dbt packages
+## 8. Configure optional S3 raw snapshots
+
+Local storage is the default and remains the rollback setting:
+
+```dotenv
+RAW_STORAGE=local
+S3_BUCKET=
+S3_PREFIX=raw/
+AWS_DEFAULT_REGION=
+```
+
+For S3 storage, use an existing bucket and a dedicated prefix. Do not add AWS access keys to `.env`; boto3 uses its default credential provider chain. On EC2, prefer the instance profile/IAM role:
+
+```dotenv
+RAW_STORAGE=s3
+S3_BUCKET=YOUR_BUCKET_NAME
+S3_PREFIX=job-intelligence/raw/
+AWS_DEFAULT_REGION=us-east-1
+```
+
+The role needs only `s3:PutObject` and `s3:GetObject` on `arn:aws:s3:::YOUR_BUCKET_NAME/job-intelligence/raw/*` for ingestion and replay. Add `s3:ListBucket` on the bucket only if an operational tool needs prefix listing; this application does not require it. If bucket encryption uses a customer-managed KMS key, grant the role the corresponding encryption/decryption permissions separately.
+
+After changing `requirements.txt`, `Dockerfile`, or Compose configuration, rebuild and recreate the application and Airflow containers. Run from the checkout, with no ingestion active:
+
+```bash
+sudo docker compose build app airflow-init airflow-webserver airflow-scheduler
+sudo docker compose up -d --force-recreate airflow-init airflow-webserver airflow-scheduler app
+sudo docker compose ps -a
+```
+
+Check the attached identity from inside the scheduler without printing credentials:
+
+```bash
+sudo docker compose exec airflow-scheduler python -c 'import boto3; print(boto3.client("sts").get_caller_identity())'
+```
+
+This command prints only the account, ARN, and principal ID; it does not print credentials or environment variables.
+
+Safe S3 smoke test: use a dedicated test prefix and synthetic JSON, never the production ingestion command. The following uploads and downloads an inline synthetic payload without running ingestion or loading PostgreSQL:
+
+```bash
+TEST_PREFIX=job-intelligence/smoke/$(date -u +%Y%m%dT%H%M%SZ)
+sudo docker compose exec -e TEST_PREFIX="$TEST_PREFIX" airflow-scheduler bash -lc \
+  'python - <<'PY'
+import json, os, tempfile, boto3
+from config import get_raw_storage_config
+
+cfg = get_raw_storage_config()
+key = os.environ["TEST_PREFIX"] + "/synthetic.json"
+body = json.dumps([{"synthetic": True}]).encode()
+client = boto3.client("s3", region_name=cfg.region)
+client.put_object(Bucket=cfg.bucket, Key=key, Body=body, ContentType="application/json")
+with tempfile.NamedTemporaryFile() as downloaded:
+    client.download_file(cfg.bucket, key, downloaded.name)
+    assert open(downloaded.name, "rb").read() == body
+print(f"S3 smoke upload/download succeeded: s3://{cfg.bucket}/{key}")
+PY'
+```
+
+For a download-only check without deleting the object, use an existing synthetic test key:
+
+```bash
+sudo docker compose exec airflow-scheduler python -u src/replay.py s3://YOUR_BUCKET_NAME/YOUR_TEST_PREFIX/synthetic.json
+```
+
+Do not run that replay command against production data unless a database load is intended. Remove only the dedicated smoke-test object later through the normal bucket lifecycle/operations process, never with a broad prefix deletion.
+
+Troubleshooting:
+
+- Missing credentials: verify the container can reach the EC2 instance metadata endpoint and that the instance profile is attached. Do not add static keys.
+- `AccessDenied`: check the exact bucket and prefix ARN, role trust policy, bucket policy, KMS policy if applicable, and region; the configured prefix is part of the object key.
+- EC2 metadata unavailable from Docker: inspect host/container networking and IMDS hop-limit settings. If the current setting blocks containers, the minimum infrastructure change is to raise the instance metadata `HttpPutResponseHopLimit` to `2` while keeping `HttpTokens=required` (IMDSv2). Make this change explicitly in AWS infrastructure; this application does not modify it automatically.
+- Upload failure: the local snapshot remains in `data/raw/`, the Airflow task fails, and the watermark is not advanced. Retry after fixing access.
+
+Rollback to local storage by setting `RAW_STORAGE=local` and clearing the S3-only values, then recreate the containers with the commands above. Existing S3 snapshots are not deleted; local ingestion resumes writing under `data/raw/`.
+
+## 9. Start services and install dbt packages
 
 ```bash
 sudo docker compose up -d
@@ -259,7 +335,7 @@ sudo docker compose exec airflow-scheduler id
 sudo docker compose exec -w /opt/airflow/project airflow-scheduler python -c 'import os; from pathlib import Path; print("env readable:", os.access(".env", os.R_OK)); print("project writable:", os.access(".", os.W_OK)); print({p: os.access(p, os.W_OK) for p in ["data", "data/raw", "logs", "target", "dbt_packages"]})'
 ```
 
-## 9. Test the DAG end to end
+## 10. Test the DAG end to end
 
 1. Open the laptop tunnel from section 1.
 2. Log in at http://localhost:18080.
@@ -278,7 +354,7 @@ sudo docker compose exec -w /opt/airflow/project airflow-scheduler python -u scr
 
 Run them separately, with no overlapping matching Airflow task. After fixing dbt, clear only the failed `dbt_build` task in Airflow. Ensure the clear selection does not include upstream ingestion unless intended.
 
-## 10. Preserve useful errors
+## 11. Preserve useful errors
 
 In `scripts/run_dbt.py`, inspect the returned exception rather than silently converting every failure into exit code 1:
 
@@ -321,7 +397,7 @@ def _run_command(command: list[str], task_name: str) -> None:
 
 Use `sys.executable, "-u", ...` for ingestion and dbt Python commands. Forwarded lines have Airflow INFO level even if their text contains ERROR; the raised exception still makes the task fail. Avoid logging secrets. This wrapper does not itself implement full subprocess timeout/termination management.
 
-## 11. Connect pgAdmin and verify persistence
+## 12. Connect pgAdmin and verify persistence
 
 With the laptop tunnel open, register an EC2 server in pgAdmin:
 
@@ -362,7 +438,7 @@ sudo docker compose ps -a
 
 Reconnect pgAdmin and compare counts after PostgreSQL is healthy. Counts should remain unchanged unless another ingestion ran. Do not use `down -v`: it removes named volumes. Volumes surviving container recreation does not prove protection against host/disk loss; keep independent backups.
 
-## 12. First load, watermark, and recovery
+## 13. First load, watermark, and recovery
 
 An empty EC2 database does not automatically reset a file-based watermark. A watermark copied from local development can cause records to be skipped even though they are absent from EC2.
 
@@ -385,7 +461,7 @@ sudo docker compose exec -w /opt/airflow/project airflow-scheduler python -u scr
 
 Verify replay's watermark behavior in the current code before using it. Replay can only restore records present in available snapshots. Do not casually delete the watermark or database volume. Runtime watermark state should be environment-specific, not shipped as production state in Git.
 
-## 13. Deploy a code update
+## 14. Deploy a code update
 
 On the laptop: edit, commit, and push. On EC2:
 
@@ -413,7 +489,7 @@ Avoid updates while tasks are active. Record the deployed commit:
 git rev-parse HEAD
 ```
 
-## 14. Daily operations and troubleshooting
+## 15. Daily operations and troubleshooting
 
 ```bash
 # Service state, including completed init containers
@@ -453,7 +529,7 @@ sudo docker compose down
 | Browser unavailable | Tunnel open? EC2 running? Webserver up? Correct port? |
 | Changes absent on EC2 | Pull correct commit; rebuild only when necessary |
 
-## 15. Survive a host reboot and prove independent scheduling
+## 16. Survive a host reboot and prove independent scheduling
 
 `up -d` detaches containers from your terminal; it does not alone guarantee restart after a host reboot.
 
@@ -467,7 +543,7 @@ Review Compose and add `restart: unless-stopped` to appropriate long-running ser
 
 Leave the DAG unpaused. Close laptop SSH sessions and verify the next scheduled ingestion and dbt build succeed. Check the Airflow timezone before interpreting `@daily`; the supplied DAG uses Airflow's configured default timezone. Scheduling is not dependent on an open browser.
 
-## 16. Handoff to another developer
+## 17. Handoff to another developer
 
 Provide the repository, `.env.example`, this runbook, expected service names/mounts, supported versions, and verification queries. Give each developer their own authorized server access; do not share the private SSH key or commit secrets.
 

@@ -2,7 +2,7 @@ import logging
 
 from extract import fetch_all_jobs, save_raw_snapshot, save_watermark, load_watermark, filter_new_jobs
 from load import load_jobs
-from config import DATABASE_URL, WATERMARK_PATH
+from config import DATABASE_URL, WATERMARK_PATH, get_raw_storage_config
 
 logger = logging.getLogger(__name__)
 
@@ -11,6 +11,7 @@ def main():
     datefmt="%Y-%m-%d %H:%M:%S",)
     try:
         logger.info("Normal ingestion started")
+        get_raw_storage_config()
         all_jobs = fetch_all_jobs()
         logger.info("Fetched %d job records.", len(all_jobs))
 
@@ -31,6 +32,7 @@ def main():
             new_jobs,
             DATABASE_URL,
             records_fetched=len(all_jobs),
+            snapshot_location=str(raw_snapshot_path),
         )
         logger.info("Processed %d job records.", count)
 

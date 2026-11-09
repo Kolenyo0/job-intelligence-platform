@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS pipeline_runs (
     records_fetched INTEGER NOT NULL,
     records_new INTEGER NOT NULL,
     records_loaded INTEGER NOT NULL,
+    snapshot_location TEXT,
     run_type TEXT NOT NULL DEFAULT 'ingestion'
 )
 """
@@ -39,6 +40,11 @@ CREATE TABLE IF NOT EXISTS pipeline_runs (
 ADD_RUN_TYPE_COLUMN = """
 ALTER TABLE pipeline_runs
 ADD COLUMN IF NOT EXISTS run_type TEXT NOT NULL DEFAULT 'ingestion'
+"""
+
+ADD_SNAPSHOT_LOCATION_COLUMN = """
+ALTER TABLE pipeline_runs
+ADD COLUMN IF NOT EXISTS snapshot_location TEXT
 """
 
 INSERT_PIPELINE_RUN = """
@@ -50,9 +56,10 @@ INSERT INTO pipeline_runs (
     records_fetched,
     records_new,
     records_loaded,
+    snapshot_location,
     run_type
 )
-VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
 """
 
 INSERT_JOB = """
@@ -128,6 +135,7 @@ def load_jobs(
     database_url: str,
     records_fetched: int | None = None,
     run_type: str = "ingestion",
+    snapshot_location: str | None = None,
 ) -> int:
     rows = [_job_data(job, index) for index, job in enumerate(jobs, start=1)]
     records_fetched = len(jobs) if records_fetched is None else records_fetched
@@ -139,6 +147,7 @@ def load_jobs(
             cursor.execute(CREATE_TABLE)
             cursor.execute(CREATE_PIPELINE_RUNS_TABLE)
             cursor.execute(ADD_RUN_TYPE_COLUMN)
+            cursor.execute(ADD_SNAPSHOT_LOCATION_COLUMN)
 
             if records_fetched == 0:
                 completed_at = datetime.now(timezone.utc)
@@ -152,6 +161,7 @@ def load_jobs(
                         records_fetched,
                         len(rows),
                         0,
+                        snapshot_location,
                         run_type,
                     ),
                 )
@@ -171,6 +181,7 @@ def load_jobs(
                     records_fetched,
                     len(rows),
                     len(rows),
+                    snapshot_location,
                     run_type,
                 ),
             )

@@ -24,6 +24,10 @@ services:
     image: job-intelligence-app:local
     environment:
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
+      RAW_STORAGE: ${RAW_STORAGE:-local}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_PREFIX: ${S3_PREFIX:-raw/}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-}
     depends_on:
       jobs_db:
         condition: service_healthy
@@ -57,6 +61,10 @@ services:
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "false"
       AIRFLOW__WEBSERVER__SECRET_KEY: local-job-intelligence-secret
       DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env}
+      RAW_STORAGE: ${RAW_STORAGE:-local}
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_PREFIX: ${S3_PREFIX:-raw/}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-}
       PYTHONPATH: /opt/airflow/project/src
     volumes: &airflow-volumes
       - ./dags:/opt/airflow/dags
