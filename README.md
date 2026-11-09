@@ -2,7 +2,7 @@
 
 An end-to-end data engineering project that turns job-board API data into a tested PostgreSQL analytics layer and a Power BI executive dashboard. The platform runs on AWS EC2 using Docker Compose, with Apache Airflow coordinating daily ingestion and dbt transformations.
 
-**Status:** Deployed on AWS EC2; deployed end-to-end pipeline test completed successfully on November 5, 2026.
+**Status:** Deployed on AWS EC2; deployed end-to-end pipeline test completed successfully on November 5, 2026. Supports local or private S3 raw-snapshot storage, authenticates through an EC2 IAM role, preserves local snapshots on upload failure, and supports replay from local files or S3.
 
 **Purpose**
 
